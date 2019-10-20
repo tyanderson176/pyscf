@@ -441,9 +441,38 @@ class SymAdaptedRHF(hf.RHF):
                             verbose=self.verbose)
         return mo_occ
 
+    def get_partner_orbs(self):
+        def is_x_symm(ir_label):
+          if len(ir_label) < 3:
+            return False
+          return ir_label[0] == 'E' and ir_label[-1] == 'x'
+        
+        def is_y_symm(ir_label):
+          if len(ir_label) < 3:
+            return False
+          return ir_label[0] == 'E' and ir_label[-1] == 'y'
+    
+        mol = self.mol
+        num_orb = len(self.mo_coeff)
+        partner_orbs = numpy.arange(num_orb)#[n for n in range(num_orb)]
+        orb_symm = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, self.mo_coeff)
+        x_irreps = numpy.unique([ir for ir in orb_symm if is_x_symm(ir)])
+        y_irreps = numpy.unique([ir for ir in orb_symm if is_y_symm(ir)])
+        for x_ir, y_ir in zip(x_irreps, y_irreps):
+            Ex_orbs, = numpy.where(orb_symm == x_ir)
+            Ey_orbs, = numpy.where(orb_symm == y_ir)
+            for xorb, yorb in zip(Ex_orbs, Ey_orbs):
+                partner_orbs[xorb] = yorb
+                partner_orbs[yorb] = xorb
+        return partner_orbs
+
     def _finalize(self):
         hf.RHF._finalize(self)
 
+#        mol = self.mol
+#        orb_symm = symm.label_orb_symm(mol, mol.irrep_name, mol.symm_orb, self.mo_coeff)
+        if (self.mol.groupname in ('Dooh', 'Coov')):
+            self.partner_orbs = self.get_partner_orbs()
         # sort MOs wrt orbital energies, it should be done last.
         # Using mergesort because it is stable. We don't want to change the
         # ordering of the symmetry labels when two orbitals are degenerated.
@@ -456,6 +485,11 @@ class SymAdaptedRHF(hf.RHF):
         orbsym = get_orbsym(self.mol, self.mo_coeff)
         self.mo_coeff = lib.tag_array(self.mo_coeff[:,idx], orbsym=orbsym[idx])
         self.mo_occ = self.mo_occ[idx]
+
+        if hasattr(self, 'partner_orbs'):
+            idx_inv = numpy.argsort(idx)
+            self.partner_orbs = [idx_inv[orb] for orb in self.partner_orbs[idx]]
+
         if self.chkfile:
             chkfile.dump_scf(self.mol, self.chkfile, self.e_tot, self.mo_energy,
                              self.mo_coeff, self.mo_occ, overwrite_mol=False)
@@ -694,6 +728,7 @@ class SymAdaptedROHF(rohf.ROHF):
         idx = numpy.hstack((idx[self.mo_occ==2][c_sort],
                             idx[self.mo_occ==1][o_sort],
                             idx[self.mo_occ==0][v_sort]))
+
         if getattr(self.mo_energy, 'mo_ea', None) is not None:
             mo_ea = self.mo_energy.mo_ea[idx]
             mo_eb = self.mo_energy.mo_eb[idx]
