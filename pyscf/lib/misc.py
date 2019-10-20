@@ -39,6 +39,8 @@ if h5py.version.version[:4] == '2.2.':
     sys.stderr.write('h5py-%s is found in your environment. '
                      'h5py-%s has bug in threading mode.\n'
                      'Async-IO is disabled.\n' % ((h5py.version.version,)*2))
+if h5py.version.version[:2] == '3.':
+    h5py.get_config().default_file_mode = 'a'
 
 c_double_p = ctypes.POINTER(ctypes.c_double)
 c_int_p = ctypes.POINTER(ctypes.c_int)
@@ -907,6 +909,10 @@ class GradScanner:
     @property
     def e_tot(self):
         return self.base.e_tot
+    @e_tot.setter
+    def e_tot(self, x):
+        self.base.e_tot = x
+
     @property
     def converged(self):
 # Some base methods like MP2 does not have the attribute converged
